@@ -1,7 +1,7 @@
 "use strict";
 
 var path = require("path");
-var _    = require("lodash");
+var _ = require("lodash");
 
 /**
  * Default Options
@@ -13,23 +13,23 @@ var defaults = {
 
 /**
  * @param {string} src
- * @param {string|array} matcher
  * @param {object} [config]
  * @returns {string}
  */
-exports.breakCache = function (src, matcher, config) {
+exports.breakCache = function(src, config) {
 
+    var matcher = config.match;
     var opts = mergeOptions(_.cloneDeep(defaults), config);
 
     function replacer(src, match) {
-        var replacement = _getReplacement(opts.replacement, opts);
-        var replacer    = _getReplacer(opts.position, replacement);
-        var regex       = _getRegex(match, opts.position);
+        var replacement = _getReplacement(src, opts.replacement, opts, match);
+        var replacer = _getReplacer(opts.position, replacement);
+        var regex = _getRegex(match, opts.position);
         return src.replace(regex, replacer);
     }
 
     if (Array.isArray(matcher)) {
-        matcher.forEach(function (match) {
+        matcher.forEach(function(match) {
             src = replacer(src, match);
         });
     } else {
@@ -44,21 +44,19 @@ exports.breakCache = function (src, matcher, config) {
  * @param config
  * @returns {*}
  */
-function _getReplacement(replacement, config) {
-
+function _getReplacement(src, replacement, config, match) {
     if (replacement === "time") {
         return new Date().getTime().toString();
     }
-
     if (replacement === "md5") {
-        if (typeof config.src === "string") {
-            return md5(config.src, config.length || 10);
-        } else {
-            if (config.src.path) {
-                var content = getFileContents(config.src.path);
-                if (content) {
-                    return md5(content, config.length || 10);
-                }
+        var filePath = String(src.match(_getRegex(match, config.position)));
+        // _getRegex returns string with "" inside the string - needs to be removed
+        filePath = filePath.slice(1, (filePath.length - 1)).split("?")[0];
+        if (config.currPath) {
+            var filePath = joinPath(config.currPath, filePath);
+            var content = getFileContents(filePath);
+            if (content) {
+                return md5(content, config.length || 10);
             }
         }
     }
@@ -74,7 +72,7 @@ function _getReplacement(replacement, config) {
 function _getRegex(matcher, position) {
 
     function fullMatcher() {
-        return new RegExp("(('|\")(.+?)?)("+matcher+")([\\w\\?=]*)('|\")", "g");
+        return new RegExp("(('|\")(.+?)?)(" + matcher + ")([\\w\\?=]*)('|\")", "g");
     }
 
     function prepareString(seg) {
@@ -86,12 +84,10 @@ function _getRegex(matcher, position) {
      * @type {{overwrite: overwrite, filename: fullMatcher, append: fullMatcher}}
      */
     var regexs = {
-        overwrite: function () {
-
-            var split  = matcher.split("*");
+        overwrite: function() {
+            var split = matcher.split("*");
             var before = prepareString(split[0]);
-            var after  = prepareString(split[1]);
-
+            var after = prepareString(split[1]);
             return new RegExp(before + "(?:.+?)" + after, "g");
         },
         filename: fullMatcher,
@@ -111,18 +107,18 @@ function _getRegex(matcher, position) {
  */
 function _getReplacer(type, replacement) {
 
-    function replace (string) {
+    function replace(string) {
         return string.replace("%time%", replacement);
     }
 
     var templates = {
         append: replace("$1$4?rel=%time%$6"),
-        filename: function () {
+        filename: function() {
             var start = arguments[1];
-            var end   = arguments[6];
+            var end = arguments[6];
             var match = arguments[4];
-            var file  = path.basename(match).split(".");
-            var ext   = file.pop();
+            var file = path.basename(match).split(".");
+            var ext = file.pop();
             return replace(start + file.join(".") + ".%time%." + ext + end);
         },
         overwrite: replace("$1%time%$2")
@@ -138,7 +134,7 @@ exports._getReplacer = _getReplacer;
  */
 function getFileContents(filepath) {
     var path = require("path");
-    var fs   = require("fs");
+    var fs = require("fs");
     filepath = path.resolve(filepath);
     return fs.readFileSync(filepath, 'utf-8');
 }
@@ -157,6 +153,29 @@ function mergeOptions(defaults, config) {
  */
 function md5(src, length) {
     var crypto = require('crypto');
-    var hash   = crypto.createHash('md5').update(src, 'utf8').digest('hex');
+    var hash = crypto.createHash('md5').update(src, 'utf8').digest('hex');
     return hash.slice(0, length);
+}
+
+function joinPath() {
+    var parts = [];
+    var prefix = "";
+    //save prefix before split for join items when one of them is url
+    if (arguments[0].indexOf("//") > -1) {
+        prefix = arguments[0].split("//") || "";
+        arguments[0] = prefix[1];
+        prefix = prefix[0] + "//";
+    }
+    for (var i = 0, l = arguments.length; i < l; i++) {
+        parts = parts.concat(arguments[i].split("/"));
+    }
+    var newParts = [];
+    for (i = 0, l = parts.length; i < l; i++) {
+        var part = parts[i];
+        if (!part || part === ".") continue;
+        if (part === "..") newParts.pop();
+        else newParts.push(part);
+    }
+    if (parts[0] === "") newParts.unshift("");
+    return prefix + (newParts.join("/") || (newParts.length ? "/" : "."));
 }
