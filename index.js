@@ -50,13 +50,15 @@ function _getReplacement(src, replacement, config, match) {
     }
     if (replacement === "md5") {
         var filePath = String(src.match(_getRegex(match, config.position)));
-        // _getRegex returns string with "" inside the string - needs to be removed
-        filePath = filePath.slice(1, (filePath.length - 1)).split("?")[0];
-        if (config.currPath) {
-            var filePath = joinPath(config.currPath, filePath);
-            var content = getFileContents(filePath);
-            if (content) {
-                return md5(content, config.length || 10);
+        if (filePath !== 'null') {
+            // _getRegex returns string with "" inside the string - needs to be removed
+            filePath = filePath.slice(1, (filePath.length - 1)).split("?")[0];
+            if (config.currPath) {
+                var filePath = joinPath(config.currPath, filePath);
+                var content = getFileContents(filePath);
+                if (content) {
+                    return md5(content, config.length || 10);
+                }
             }
         }
     }
